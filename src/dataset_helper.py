@@ -35,9 +35,9 @@ def getTrainingTensor(names):
     for name in names:
         try:
             image = np.asarray(Image.open(name))
-            if len(image.shape) == 3:
+            if len(tensor) == 0 or image.shape == tensor[-1].shape:
                 tensor.append(image)
         except:
-            os.remove(name)
+           os.remove(name)
     return np.array(tensor)
 
