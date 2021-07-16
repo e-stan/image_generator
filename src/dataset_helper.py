@@ -2,6 +2,7 @@ import numpy as np
 import urllib.request
 from PIL import Image
 import pandas as pd
+import os
 
 def downloadImages(urls,size,datadir,names=None):
     if type(names) == type(None):
@@ -30,5 +31,13 @@ def download_all_iamges_from_tsv(fn,size,datadir):
     return names
 
 def getTrainingTensor(names):
-
+    tensor = []
+    for name in names:
+        try:
+            image = np.asarray(Image.open(name))
+            if len(image.shape) == 3:
+                tensor.append(image)
+        except:
+            os.remove(name)
+    return np.array(tensor)
 
