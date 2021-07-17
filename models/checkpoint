@@ -1,0 +1,2 @@
+model_checkpoint_path: "abstract_vae"
+all_model_checkpoint_paths: "abstract_vae"

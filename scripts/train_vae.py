@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     tensor = tensor.astype("float32") / 255
 
-    vae = ImageVAE((128,128,3),[16,32],[32,16])
+    vae = ImageVAE((128,128,3),[16,32],[32,16],latent_dim=3)
 
     vae.compile(optimizer=keras.optimizers.Adam())
 
