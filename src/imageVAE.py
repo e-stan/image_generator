@@ -16,7 +16,7 @@ class Sampling(layers.Layer):
 
 class ImageVAE(keras.Model):
 
-    def __init__(self,data_dim,encodingConvArch,decodingConvArch,kernelsize = 3,latent_dim=2,activation = "relu",**kwargs):
+    def __init__(self,data_dim,encodingConvArch,decodingConvArch,kernelsize = 3,latent_dim=2,stride=2,activation = "relu",**kwargs):
         super(ImageVAE, self).__init__(**kwargs)
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -24,6 +24,7 @@ class ImageVAE(keras.Model):
         self.decodingConvArch = decodingConvArch
         self.kernelsize = kernelsize
         self.activation = activation
+        self.stride = stride
 
         self.total_loss_tracker = keras.metrics.Mean(name="total_loss")
         self.reconstruction_loss_tracker = keras.metrics.Mean(
@@ -32,10 +33,10 @@ class ImageVAE(keras.Model):
         self.kl_loss_tracker = keras.metrics.Mean(name="kl_loss")
         print(self.data_dim)
         encoder_inputs = keras.Input(shape=self.data_dim)
-        x = layers.Conv2D(self.encodingConvArch[0], self.kernelsize, activation=self.activation, padding="same",use_bias=False)(encoder_inputs)
+        x = layers.Conv2D(self.encodingConvArch[0], self.kernelsize, strides= self.stride,activation=self.activation, padding="same",use_bias=False)(encoder_inputs)
         if len(self.encodingConvArch) > 1:
             for d in self.encodingConvArch[1:]:
-                x = layers.Conv2D(d, self.kernelsize, activation=self.activation, padding="same",use_bias=False)(x)
+                x = layers.Conv2D(d, self.kernelsize, activation=self.activation, strides= self.stride, padding="same",use_bias=False)(x)
 
         x = layers.Flatten()(x)
         x = layers.Dense(16, activation=self.activation)(x)
@@ -51,9 +52,9 @@ class ImageVAE(keras.Model):
         x = layers.Dense(self.data_dim[0] * self.data_dim[1] * decodingConvArch[0], activation=self.activation)(decoder_inputs)
         x = layers.Reshape((self.data_dim[0], self.data_dim[1], decodingConvArch[0]))(x)
         for d in self.decodingConvArch:
-            x = layers.Conv2DTranspose(d, self.kernelsize, activation=self.activation, padding="same")(x)
+            x = layers.Conv2DTranspose(d, self.kernelsize, strides= self.stride,activation=self.activation, padding="same")(x)
 
-        decoder_outputs = layers.Conv2DTranspose(self.data_dim[-1], self.kernelsize, activation="sigmoid", padding="same")(x)
+        decoder_outputs = layers.Conv2DTranspose(self.data_dim[-1], self.kernelsize, strides= self.stride,activation="sigmoid", padding="same")(x)
         decoder = keras.Model(decoder_inputs, decoder_outputs, name="decoder")
         decoder.summary()
 
