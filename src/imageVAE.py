@@ -37,9 +37,9 @@ class ImageVAE(keras.Model):
         if len(self.encodingConvArch) > 1:
             for d in self.encodingConvArch[1:]:
                 x = layers.Conv2D(d, self.kernelsize, activation=self.activation, strides= self.stride, padding="same",use_bias=False)(x)
-
+        dimbeforeFlatten = keras.backend.int_shape(x)[1:]
         x = layers.Flatten()(x)
-        x = layers.Dense(16, activation=self.activation)(x)
+        #x = layers.Dense(int(10*latent_dim), activation=self.activation)(x)
         z_mean = layers.Dense(latent_dim, name="z_mean")(x)
         z_log_var = layers.Dense(latent_dim, name="z_log_var")(x)
         z = Sampling()([z_mean, z_log_var])
@@ -49,12 +49,12 @@ class ImageVAE(keras.Model):
         self.encoder = encoder
 
         decoder_inputs = keras.Input(shape=(latent_dim,))
-        x = layers.Dense(self.data_dim[0] * self.data_dim[1] * decodingConvArch[0], activation=self.activation)(decoder_inputs)
-        x = layers.Reshape((self.data_dim[0], self.data_dim[1], decodingConvArch[0]))(x)
+        x = layers.Dense(dimbeforeFlatten[0] * dimbeforeFlatten[1] * decodingConvArch[0], activation=self.activation)(decoder_inputs)
+        x = layers.Reshape((dimbeforeFlatten[0], dimbeforeFlatten[1], decodingConvArch[0]))(x)
         for d in self.decodingConvArch:
             x = layers.Conv2DTranspose(d, self.kernelsize, strides= self.stride,activation=self.activation, padding="same")(x)
 
-        decoder_outputs = layers.Conv2DTranspose(self.data_dim[-1], self.kernelsize, strides= self.stride,activation="sigmoid", padding="same")(x)
+        decoder_outputs = layers.Conv2DTranspose(self.data_dim[-1], self.kernelsize, strides= 1,activation="sigmoid", padding="same")(x)
         decoder = keras.Model(decoder_inputs, decoder_outputs, name="decoder")
         decoder.summary()
 

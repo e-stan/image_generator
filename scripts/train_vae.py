@@ -12,13 +12,13 @@ if __name__ == "__main__":
 
     tensor = tensor.astype("float32") / 255
 
-    vae = ImageVAE((128,128,3),[16,32],[32,16],latent_dim=100,stride=2)
+    vae = ImageVAE((128,128,3),[32,64,64],[64,64,32],latent_dim=100,stride=2)
 
     vae.compile(optimizer=keras.optimizers.Adam())
 
     vae.fit(tensor, epochs=5,batch_size=16)
 
-    vae.save_weights("../models/abstract_vae_100")
+    vae.save_weights("../models/abstract_vae_100_2")
 
 
 
