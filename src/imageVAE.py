@@ -104,4 +104,10 @@ class ImageVAE(keras.Model):
             latent_images.append([stats.norm.rvs(*x) for x in self.latentSpaceDist])
         return self.decoder.predict(np.array(latent_images))
 
+    def call(self,x):
+        _,_,encoded = self.encoder(x)
+        #print(len(encoded),len(encoded[0]))#.shape)
+        decoded = self.decoder(encoded)
+        return decoded
+
 

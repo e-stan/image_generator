@@ -6,6 +6,7 @@ import os
 import uuid
 import sys
 import matplotlib.pyplot as plt
+import keras
 
 def downloadImages(urls,size,datadir,names=None):
     if type(names) == type(None):
@@ -33,16 +34,31 @@ def download_all_iamges_from_tsv(fn,size,datadir):
     names = downloadImages(parseUrls(fn),size,datadir)
     return names
 
-def getTrainingTensor(names):
-    tensor = []
+def getTrainingTensor(names,dim):
+    tensor = np.zeros((len(names),dim[0],dim[1],dim[2]))
+    goodInds = []
+    i = 0
     for name in names:
         try:
             image = readImage(name)
-            if len(tensor) == 0 or image.shape == tensor[-1].shape:
-                tensor.append(image)
+            if image.shape == dim:
+                goodInds.append(i)
+                tensor[i] = image
+                #tensor.append(image)
         except:
            os.remove(name)
-    return np.array(tensor)
+        i += 1
+    return tensor[goodInds]
+
+def cleanImageFiles(names):
+    goodNames = []
+    for name in names:
+        try:
+            readImage(name)
+            goodNames.append(name)
+        except:
+           os.remove(name)
+    return goodNames
 
 def saveImage(image,fn):
     image = image * 255.0
@@ -78,4 +94,5 @@ def enhanceImage(image,enhancement = 2,method = "NN"):
 
     return image
 
-
+def getImageGenerator(datadir,subdir,dim,batch):
+    return keras.preprocessing.image.ImageDataGenerator(rescale= 1/255.0).flow_from_directory(datadir,classes = [subdir], target_size=dim[:2],color_mode="rgb",batch_size=batch,class_mode=None)
