@@ -1,7 +1,9 @@
-import keras.layers as layers
+import tensorflow.keras.layers as layers
 import tensorflow as tf
-from keras.layers import Conv2D
-import keras
+from tensorflow.keras.layers import Conv2D
+import scipy.stats as stats
+import numpy as np
+import tensorflow.keras as keras
 
 
 class Sampling(layers.Layer):
@@ -90,4 +92,16 @@ class ImageVAE(keras.Model):
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "kl_loss": self.kl_loss_tracker.result(),
         }
+
+    def fit_image_generator(self,tensor):
+        latentReg = np.array(self.encoder.predict(tensor))
+        self.latentSpaceDist = [stats.norm.fit(latentReg[:,x]) for x in range(self.latent_dim)]
+
+
+    def generate_images(self,n=1):
+        latent_images = []
+        for _ in range(n):
+            latent_images.append([stats.norm.rvs(*x) for x in self.latentSpaceDist])
+        return self.decoder.predict(np.array(latent_images))
+
 
