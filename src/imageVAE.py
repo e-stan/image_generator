@@ -110,4 +110,7 @@ class ImageVAE(keras.Model):
         decoded = self.decoder(encoded)
         return decoded
 
+    def encode_decode(self,x):
+        return self.decoder.predict(self.encoder.predict(x)[2])
+
 
