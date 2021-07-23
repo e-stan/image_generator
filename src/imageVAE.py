@@ -94,14 +94,17 @@ class ImageVAE(keras.Model):
         }
 
     def fit_image_generator(self,tensor):
-        latentReg = np.array(self.encoder.predict(tensor))
+        _,_,latentReg = np.array(self.encoder.predict(tensor))
         self.latentSpaceDist = [stats.norm.fit(latentReg[:,x]) for x in range(self.latent_dim)]
 
 
-    def generate_images(self,n=1):
+    def generate_images(self,n=1,fixed_vars = {}):
         latent_images = []
         for _ in range(n):
             latent_images.append([stats.norm.rvs(*x) for x in self.latentSpaceDist])
+        latent_images = np.array(latent_images)
+        for ind,val in fixed_vars.items():
+            latent_images[:,ind] = val
         return self.decoder.predict(np.array(latent_images))
 
     def call(self,x):
