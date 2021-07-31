@@ -8,7 +8,7 @@ import tensorflow.keras as keras
 
 class ImageGAN(keras.Model):
 
-    def __init__(self,data_dim,arch,desc_arch,kernelsize = 3,dropout=.3,latent_size=1000,stride=2,activation = "relu",**kwargs):
+    def __init__(self,data_dim,arch,desc_arch,batchsize=32,kernelsize = 3,dropout=.3,latent_size=1000,stride=2,activation = "relu",**kwargs):
         super(ImageGAN, self).__init__(**kwargs)
         self.data_dim = data_dim
         self.arch = arch
@@ -16,11 +16,13 @@ class ImageGAN(keras.Model):
         self.activation = activation
         self.stride = stride
         self.latent_size = latent_size
+        self.batchsize = batchsize
 
         generatorInput = keras.Input(shape=self.latent_size)
 
         initialDim = int(data_dim[0] / (self.stride**len(arch)))
 
+        self.total_loss_tracker = keras.metrics.Mean(name="total_loss")
 
         x = layers.Dense(initialDim*initialDim*arch[0], activation=self.activation,use_bias=True)(generatorInput)
         x = layers.Reshape((initialDim, initialDim, arch[0]))(x)
@@ -53,41 +55,51 @@ class ImageGAN(keras.Model):
         self.desrciminator = keras.Model(descriminatorInput, output, name="descriminator")
         self.desrciminator.summary()
 
+        self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+
+        self.generator_optimizer = tf.keras.optimizers.Adam(1e-4)
+        self.discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
+
+    def discriminator_loss(self,real_output, fake_output):
+        real_loss = self.cross_entropy(tf.ones_like(real_output), real_output)
+        fake_loss = self.cross_entropy(tf.zeros_like(fake_output), fake_output)
+        total_loss = real_loss + fake_loss
+        return total_loss
+
+    def generator_loss(self,fake_output):
+        return self.cross_entropy(tf.ones_like(fake_output), fake_output)
+
+
     @property
     def metrics(self):
         return [
-            self.total_loss_tracker,
-            self.reconstruction_loss_tracker,
-            self.kl_loss_tracker,
+            self.total_loss_tracker
         ]
 
-    def train_step(self, data):
-        with tf.GradientTape() as tape:
-            z_mean, z_log_var, z = self.encoder(data)
-            reconstruction = self.decoder(z)
-            reconstruction_loss = tf.reduce_mean(
-                tf.reduce_sum(
-                    keras.losses.binary_crossentropy(data, reconstruction), axis=(1, 2)
-                )
-            )
-            kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
-            kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-            total_loss = reconstruction_loss + kl_loss
-        grads = tape.gradient(total_loss, self.trainable_weights)
-        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
-        self.total_loss_tracker.update_state(total_loss)
-        self.reconstruction_loss_tracker.update_state(reconstruction_loss)
-        self.kl_loss_tracker.update_state(kl_loss)
+    def train_step(self,images):
+
+        noise = tf.random.normal([self.batchsize, self.latent_size])
+
+        with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+            generated_images = self.generator(noise, training=True)
+
+            real_output = self.desrciminator(images, training=True)
+            fake_output = self.desrciminator(generated_images, training=True)
+
+            gen_loss = self.generator_loss(fake_output)
+            disc_loss = self.discriminator_loss(real_output, fake_output)
+
+        gradients_of_generator = gen_tape.gradient(gen_loss, self.generator.trainable_variables)
+        gradients_of_discriminator = disc_tape.gradient(disc_loss, self.desrciminator.trainable_variables)
+
+        self.generator_optimizer.apply_gradients(zip(gradients_of_generator, self.generator.trainable_variables))
+        self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, self.desrciminator.trainable_variables))
+
+        self.total_loss_tracker.update_state(gen_loss + disc_loss)
+
         return {
-            "loss": self.total_loss_tracker.result(),
-            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
-            "kl_loss": self.kl_loss_tracker.result(),
+            "loss": self.total_loss_tracker.result()
         }
-
-    def fit_image_generator(self,tensor):
-        _,_,latentReg = np.array(self.encoder.predict(tensor))
-        self.latentSpaceDist = [stats.norm.fit(latentReg[:,x]) for x in range(self.latent_dim)]
-
 
     def generate_images(self,n=1,fixed_vars = {}):
         latent_images = []
@@ -98,13 +110,5 @@ class ImageGAN(keras.Model):
             latent_images[:,ind] = val
         return self.decoder.predict(np.array(latent_images))
 
-    def call(self,x):
-        _,_,encoded = self.encoder(x)
-        #print(len(encoded),len(encoded[0]))#.shape)
-        decoded = self.decoder(encoded)
-        return decoded
-
-    def encode_decode(self,x):
-        return self.decoder.predict(self.encoder.predict(x)[2])
 
 
