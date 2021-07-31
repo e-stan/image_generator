@@ -8,7 +8,7 @@ import tensorflow.keras as keras
 
 class ImageGAN(keras.Model):
 
-    def __init__(self,data_dim,arch,kernelsize = 3,latent_size=1000,stride=2,activation = "relu",**kwargs):
+    def __init__(self,data_dim,arch,desc_arch,kernelsize = 3,dropout=.3,latent_size=1000,stride=2,activation = "relu",**kwargs):
         super(ImageGAN, self).__init__(**kwargs)
         self.data_dim = data_dim
         self.arch = arch
@@ -16,39 +16,42 @@ class ImageGAN(keras.Model):
         self.activation = activation
         self.stride = stride
         self.latent_size = latent_size
-        self.total_loss_tracker = keras.metrics.Mean(name="total_loss")
-        self.reconstruction_loss_tracker = keras.metrics.Mean(
-            name="reconstruction_loss"
-        )
-        self.kl_loss_tracker = keras.metrics.Mean(name="kl_loss")
-        print(self.data_dim)
-        encoder_inputs = keras.Input(shape=self.data_dim)
-        x = layers.Conv2D(self.encodingConvArch[0], self.kernelsize, strides= self.stride,activation=self.activation, padding="same",use_bias=False)(encoder_inputs)
-        if len(self.encodingConvArch) > 1:
-            for d in self.encodingConvArch[1:]:
-                x = layers.Conv2D(d, self.kernelsize, activation=self.activation, strides= self.stride, padding="same",use_bias=False)(x)
-        dimbeforeFlatten = keras.backend.int_shape(x)[1:]
+
+        generatorInput = keras.Input(shape=self.latent_size)
+
+        initialDim = int(data_dim[0] / (self.stride**len(arch)))
+
+
+        x = layers.Dense(initialDim*initialDim*arch[0], activation=self.activation,use_bias=True)(generatorInput)
+        x = layers.Reshape((initialDim, initialDim, arch[0]))(x)
+
+        if len(self.arch) > 1:
+            for d in self.arch:
+                x = layers.Conv2DTranspose(d, self.kernelsize, activation=self.activation, strides= self.stride, padding="same",use_bias=False)(x)
+
+        output = layers.Conv2DTranspose(self.data_dim[-1], self.kernelsize, strides= 1,activation="sigmoid", padding="same")(x)
+
+        generator = keras.Model(generatorInput, output, name="generator")
+        generator.summary()
+
+        self.generator = generator
+
+        descriminatorInput = keras.Input(shape=data_dim)
+
+        x = layers.Conv2D(desc_arch[0], self.kernelsize,strides=self.stride, padding='same',activation=self.activation,use_bias=False)(descriminatorInput)
+        x = layers.LeakyReLU()(x)
+        x = layers.Dropout(dropout)(x)
+
+        for a in desc_arch[1:]:
+            x = layers.Conv2D(a,self.kernelsize, strides=self.stride, padding='same',activation=self.activation)(x)
+            x = layers.LeakyReLU()(x)
+            x = layers.Dropout(dropout)(x)
+
         x = layers.Flatten()(x)
-        #x = layers.Dense(int(10*latent_dim), activation=self.activation)(x)
-        z_mean = layers.Dense(latent_dim, name="z_mean")(x)
-        z_log_var = layers.Dense(latent_dim, name="z_log_var")(x)
-        z = Sampling()([z_mean, z_log_var])
-        encoder = keras.Model(encoder_inputs, [z_mean, z_log_var, z], name="encoder")
-        encoder.summary()
+        output = layers.Dense(1,activation="sigmoid")(x)
 
-        self.encoder = encoder
-
-        decoder_inputs = keras.Input(shape=(latent_dim,))
-        x = layers.Dense(dimbeforeFlatten[0] * dimbeforeFlatten[1] * decodingConvArch[0], activation=self.activation)(decoder_inputs)
-        x = layers.Reshape((dimbeforeFlatten[0], dimbeforeFlatten[1], decodingConvArch[0]))(x)
-        for d in self.decodingConvArch:
-            x = layers.Conv2DTranspose(d, self.kernelsize, strides= self.stride,activation=self.activation, padding="same")(x)
-
-        decoder_outputs = layers.Conv2DTranspose(self.data_dim[-1], self.kernelsize, strides= 1,activation="sigmoid", padding="same")(x)
-        decoder = keras.Model(decoder_inputs, decoder_outputs, name="decoder")
-        decoder.summary()
-
-        self.decoder = decoder
+        self.desrciminator = keras.Model(descriminatorInput, output, name="descriminator")
+        self.desrciminator.summary()
 
     @property
     def metrics(self):
