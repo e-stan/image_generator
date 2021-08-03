@@ -111,4 +111,15 @@ class ImageGAN(keras.Model):
         return self.decoder.predict(np.array(latent_images))
 
 
+    def train(self,dataset, epochs):
+        for epoch in range(epochs):
+            for image_batch in dataset:
+                self.train_step(image_batch)
+            print("epoch done",self.total_loss_tracker.result())
+
+    def call(self,input):
+        self.desrciminator(self.generator(tf.random.normal([1, self.latent_size])))
+
+
+
 
