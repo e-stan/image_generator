@@ -41,13 +41,13 @@ class ImageGAN(keras.Model):
         descriminatorInput = keras.Input(shape=data_dim)
 
         x = layers.Conv2D(desc_arch[0], self.kernelsize,strides=self.stride, padding='same',activation=self.activation,use_bias=False)(descriminatorInput)
-        x = layers.LeakyReLU()(x)
-        x = layers.Dropout(dropout)(x)
+        #x = layers.LeakyReLU()(x)
+        #x = layers.Dropout(dropout)(x)
 
         for a in desc_arch[1:]:
             x = layers.Conv2D(a,self.kernelsize, strides=self.stride, padding='same',activation=self.activation)(x)
-            x = layers.LeakyReLU()(x)
-            x = layers.Dropout(dropout)(x)
+            #x = layers.LeakyReLU()(x)
+            #x = layers.Dropout(dropout)(x)
 
         x = layers.Flatten()(x)
         output = layers.Dense(1,activation="sigmoid")(x)
@@ -101,14 +101,8 @@ class ImageGAN(keras.Model):
             "loss": self.total_loss_tracker.result()
         }
 
-    def generate_images(self,n=1,fixed_vars = {}):
-        latent_images = []
-        for _ in range(n):
-            latent_images.append([stats.norm.rvs(*x) for x in self.latentSpaceDist])
-        latent_images = np.array(latent_images)
-        for ind,val in fixed_vars.items():
-            latent_images[:,ind] = val
-        return self.decoder.predict(np.array(latent_images))
+    def generate_images(self,n=1):
+        return self.generator(tf.random.normal([n, self.latent_size]))
 
 
     def train(self,dataset, epochs):
@@ -118,7 +112,7 @@ class ImageGAN(keras.Model):
             print("epoch done",self.total_loss_tracker.result())
 
     def call(self,input):
-        self.desrciminator(self.generator(tf.random.normal([1, self.latent_size])))
+        return self.desrciminator(self.generator(tf.random.normal([1, self.latent_size])))
 
 
 
