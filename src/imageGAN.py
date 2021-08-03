@@ -1,118 +1,123 @@
 import tensorflow.keras.layers as layers
 import tensorflow as tf
-from tensorflow.keras.layers import Conv2D
 import scipy.stats as stats
 import numpy as np
 import tensorflow.keras as keras
 
+class Generator():
+    def __init__(self,data_dim,arch,kernelsize = 3,latent_size=1000,stride=2):
 
-class ImageGAN(keras.Model):
-
-    def __init__(self,data_dim,arch,desc_arch,batchsize=32,kernelsize = 3,dropout=.3,latent_size=1000,stride=2,activation = "relu",**kwargs):
-        super(ImageGAN, self).__init__(**kwargs)
-        self.data_dim = data_dim
-        self.arch = arch
-        self.kernelsize = kernelsize
-        self.activation = activation
-        self.stride = stride
         self.latent_size = latent_size
-        self.batchsize = batchsize
 
-        generatorInput = keras.Input(shape=self.latent_size)
+        self.data_dim = data_dim
 
-        initialDim = int(data_dim[0] / (self.stride**len(arch)))
+        generatorInput = keras.Input(shape=latent_size)
 
-        self.total_loss_tracker = keras.metrics.Mean(name="total_loss")
+        initialDim = int(data_dim[0] / (stride ** len(arch)))
 
-        x = layers.Dense(initialDim*initialDim*arch[0], activation=self.activation,use_bias=True)(generatorInput)
+        x = layers.Dense(initialDim * initialDim * arch[0], use_bias=True)(generatorInput)
+        x = layers.LeakyReLU(alpha=0.2)(x)
         x = layers.Reshape((initialDim, initialDim, arch[0]))(x)
 
-        if len(self.arch) > 1:
-            for d in self.arch:
-                x = layers.Conv2DTranspose(d, self.kernelsize, activation=self.activation, strides= self.stride, padding="same",use_bias=False)(x)
+        if len(arch) > 1:
+            for d in arch:
+                x = layers.Conv2DTranspose(d, kernelsize, strides=stride,padding="same", use_bias=False)(x)
+                x = layers.LeakyReLU(alpha=0.2)(x)
 
-        output = layers.Conv2DTranspose(self.data_dim[-1], self.kernelsize, strides= 1,activation="sigmoid", padding="same")(x)
+        output = layers.Conv2DTranspose(data_dim[-1], kernelsize, strides=1, activation="sigmoid",
+                                        padding="same")(x)
 
         generator = keras.Model(generatorInput, output, name="generator")
+
         generator.summary()
+
+        generator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(1e-4))
 
         self.generator = generator
 
+    def sampleLatentSpace(self,n):
+        return tf.random.normal([n, self.latent_size])
+
+    def generateImages(self,n):
+        return self.generator.predict(self.sampleLatentSpace(n))
+
+
+class Discriminator():
+
+    def __init__(self,data_dim,desc_arch,kernelsize = 3,stride=2):
         descriminatorInput = keras.Input(shape=data_dim)
 
-        x = layers.Conv2D(desc_arch[0], self.kernelsize,strides=self.stride, padding='same',activation=self.activation,use_bias=False)(descriminatorInput)
-        #x = layers.LeakyReLU()(x)
-        #x = layers.Dropout(dropout)(x)
+        x = layers.Conv2D(desc_arch[0], kernelsize, strides=stride, padding='same', use_bias=False)(descriminatorInput)
+        x = layers.LeakyReLU(alpha=.2)(x)
 
         for a in desc_arch[1:]:
-            x = layers.Conv2D(a,self.kernelsize, strides=self.stride, padding='same',activation=self.activation)(x)
-            #x = layers.LeakyReLU()(x)
-            #x = layers.Dropout(dropout)(x)
+            x = layers.Conv2D(a, kernelsize, strides=stride, padding='same', use_bias=False)(x)
+            x = layers.LeakyReLU(alpha=.2)(x)
 
         x = layers.Flatten()(x)
-        output = layers.Dense(1,activation="sigmoid")(x)
+        x = layers.Dropout(.4)(x)
+        output = layers.Dense(1, activation="sigmoid")(x)
 
-        self.desrciminator = keras.Model(descriminatorInput, output, name="descriminator")
-        self.desrciminator.summary()
+        discriminator = keras.Model(descriminatorInput, output, name="discriminator")
+        discriminator.summary()
 
-        self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+        discriminator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(1e-4), metrics=['accuracy'])
 
-        self.generator_optimizer = tf.keras.optimizers.Adam(1e-4)
-        self.discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
-
-    def discriminator_loss(self,real_output, fake_output):
-        real_loss = self.cross_entropy(tf.ones_like(real_output), real_output)
-        fake_loss = self.cross_entropy(tf.zeros_like(fake_output), fake_output)
-        total_loss = real_loss + fake_loss
-        return total_loss
-
-    def generator_loss(self,fake_output):
-        return self.cross_entropy(tf.ones_like(fake_output), fake_output)
+        self.discriminator = discriminator
+        self.data_dim = data_dim
 
 
-    @property
-    def metrics(self):
-        return [
-            self.total_loss_tracker
-        ]
+def computeLoss(y1,y2):
+    return tf.metrics.binary_crossentropy(y1,y2,from_logits=False)
+
+
+
+class ImageGAN(keras.Model):
+
+    def __init__(self,generator,discriminator,batch_size=16,**kwargs):
+        super(ImageGAN, self).__init__(**kwargs)
+        self.generator = generator
+        self.discriminator = discriminator
+        self.discriminator.discriminator.trainable = False
+        self.gan = keras.Sequential()
+        self.gan.add(generator.generator)
+        self.gan.add(discriminator.discriminator)
+        self.batch_size = batch_size
 
     def train_step(self,images):
 
-        noise = tf.random.normal([self.batchsize, self.latent_size])
+        latentPoints = self.generator.sampleLatentSpace(self.batch_size)
+
+        genImages = self.generator.generator(latentPoints)
+
+        y_images = tf.ones_like((self.batch_size,1))
+        y_gen = tf.zeros_like((self.batch_size,1))
+
 
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-            generated_images = self.generator(noise, training=True)
+            y = tf.concat([y_images,y_gen],0)
+            X = tf.concat([images,genImages],0)
+            print(y.get_shape(),X.get_shape(),images.get_shape(),genImages.get_shape())
+            print(y,self.batch_size,self.discriminator.discriminator(X))
+            des_loss = computeLoss(y,self.discriminator.discriminator(X))
 
-            real_output = self.desrciminator(images, training=True)
-            fake_output = self.desrciminator(generated_images, training=True)
-
-            gen_loss = self.generator_loss(fake_output)
-            disc_loss = self.discriminator_loss(real_output, fake_output)
-
-        gradients_of_generator = gen_tape.gradient(gen_loss, self.generator.trainable_variables)
-        gradients_of_discriminator = disc_tape.gradient(disc_loss, self.desrciminator.trainable_variables)
-
-        self.generator_optimizer.apply_gradients(zip(gradients_of_generator, self.generator.trainable_variables))
-        self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, self.desrciminator.trainable_variables))
-
-        self.total_loss_tracker.update_state(gen_loss + disc_loss)
+        gradients_of_dis = disc_tape.gradient(des_loss,self.discriminator.discriminator.trainable_variables)
+        self.discriminator.discriminator.optimizer.apply_gradients(zip(gradients_of_dis, self.discriminator.discriminator.trainable_variables))
+        #
+        # real_loss = self.discriminator.discriminator.train_on_batch(images,y_images)
+        # gen_loss = self.discriminator.discriminator.train_on_batch(genImages,y_gen)
+        #
+        # y_gen = np.ones((self.batch_size,1))
+        #
+        # gen_loss = self.gan.train_on_batch(latentPoints,y_gen)
 
         return {
-            "loss": self.total_loss_tracker.result()
+            "des loss": des_loss,
+            #"gen loss": gen_loss
         }
 
-    def generate_images(self,n=1):
-        return self.generator(tf.random.normal([n, self.latent_size]))
-
-
-    def train(self,dataset, epochs):
-        for epoch in range(epochs):
-            for image_batch in dataset:
-                self.train_step(image_batch)
-            print("epoch done",self.total_loss_tracker.result())
-
-    def call(self,input):
-        return self.desrciminator(self.generator(tf.random.normal([1, self.latent_size])))
+    def call(self,inputs):
+        return self.gan(self.generator.sampleLatentSpace(1))
 
 
 
