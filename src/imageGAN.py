@@ -114,7 +114,7 @@ class ImageGAN(keras.Model):
         }
 
     def call(self,inputs):
-        return self.gan(self.generator.sampleLatentSpace(1))
+        return self.discriminator.discriminator(self.generator.generator(self.generator.sampleLatentSpace(len(inputs))))
 
     def discriminator_loss(self, real_output, fake_output):
         real_loss = self.cross_entropy(tf.ones_like(real_output), real_output)
