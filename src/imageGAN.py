@@ -31,7 +31,7 @@ class Generator():
 
         generator.summary()
 
-        generator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(1e-4))
+        #generator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(1e-4))
 
         self.generator = generator
 
@@ -61,10 +61,12 @@ class Discriminator():
         discriminator = keras.Model(descriminatorInput, output, name="discriminator")
         discriminator.summary()
 
-        discriminator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(1e-4), metrics=['accuracy'])
+        #discriminator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(1e-4), metrics=['accuracy'])
 
         self.discriminator = discriminator
         self.data_dim = data_dim
+
+
 
 
 def computeLoss(y1,y2):
@@ -74,51 +76,53 @@ def computeLoss(y1,y2):
 
 class ImageGAN(keras.Model):
 
-    def __init__(self,generator,discriminator,batch_size=16,**kwargs):
+    def __init__(self,generator,discriminator,batch_size=16,opt=keras.optimizers.Adam(lr=0.0002, beta_1=0.5),**kwargs):
         super(ImageGAN, self).__init__(**kwargs)
         self.generator = generator
         self.discriminator = discriminator
-        self.discriminator.discriminator.trainable = False
-        self.gan = keras.Sequential()
-        self.gan.add(generator.generator)
-        self.gan.add(discriminator.discriminator)
+        #self.discriminator.discriminator.trainable = False
+        #self.gan = keras.Sequential()
+        #self.gan.add(generator.generator)
+        #self.gan.add(discriminator.discriminator)
         self.batch_size = batch_size
+        self.opt = opt
+
+        self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+
 
     def train_step(self,images):
 
         latentPoints = self.generator.sampleLatentSpace(self.batch_size)
 
-        genImages = self.generator.generator(latentPoints)
-
-        y_images = tf.ones_like((self.batch_size,1))
-        y_gen = tf.zeros_like((self.batch_size,1))
-
-
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-            y = tf.concat([y_images,y_gen],0)
-            X = tf.concat([images,genImages],0)
-            print(y.get_shape(),X.get_shape(),images.get_shape(),genImages.get_shape())
-            print(y,self.batch_size,self.discriminator.discriminator(X))
-            des_loss = computeLoss(y,self.discriminator.discriminator(X))
+            genImages = self.generator.generator(latentPoints,training=True)
+            real_output = self.discriminator.discriminator(images, training=True)
+            fake_output = self.discriminator.discriminator(genImages, training=True)
 
-        gradients_of_dis = disc_tape.gradient(des_loss,self.discriminator.discriminator.trainable_variables)
-        self.discriminator.discriminator.optimizer.apply_gradients(zip(gradients_of_dis, self.discriminator.discriminator.trainable_variables))
-        #
-        # real_loss = self.discriminator.discriminator.train_on_batch(images,y_images)
-        # gen_loss = self.discriminator.discriminator.train_on_batch(genImages,y_gen)
-        #
-        # y_gen = np.ones((self.batch_size,1))
-        #
-        # gen_loss = self.gan.train_on_batch(latentPoints,y_gen)
+            gen_loss = self.generator_loss(fake_output)
+            disc_loss = self.discriminator_loss(real_output, fake_output)
+
+        gradients_of_dis = disc_tape.gradient(disc_loss,self.discriminator.discriminator.trainable_variables)
+        self.opt.apply_gradients(zip(gradients_of_dis, self.discriminator.discriminator.trainable_variables))
+
+        gradients_of_generator = gen_tape.gradient(gen_loss, self.generator.generator.trainable_variables)
+        self.opt.apply_gradients(zip(gradients_of_generator, self.generator.generator.trainable_variables))
 
         return {
-            "des loss": des_loss,
-            #"gen loss": gen_loss
+            "des loss": disc_loss,
+            "gen loss": gen_loss
         }
 
     def call(self,inputs):
         return self.gan(self.generator.sampleLatentSpace(1))
 
+    def discriminator_loss(self, real_output, fake_output):
+        real_loss = self.cross_entropy(tf.ones_like(real_output), real_output)
+        fake_loss = self.cross_entropy(tf.zeros_like(fake_output), fake_output)
+        total_loss = real_loss + fake_loss
+        return total_loss
 
+    def generator_loss(self,fake_output):
+        return self.cross_entropy(tf.ones_like(fake_output), fake_output)
 
 
