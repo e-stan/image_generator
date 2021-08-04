@@ -76,7 +76,7 @@ def computeLoss(y1,y2):
 
 class ImageGAN(keras.Model):
 
-    def __init__(self,generator,discriminator,batch_size=16,opt=keras.optimizers.Adam(lr=0.0002, beta_1=0.5),**kwargs):
+    def __init__(self,generator,discriminator,batch_size=16,optGen=keras.optimizers.Adam(lr=0.0002, beta_1=0.5),optDisc=keras.optimizers.Adam(lr=0.0002, beta_1=0.5),**kwargs):
         super(ImageGAN, self).__init__(**kwargs)
         self.generator = generator
         self.discriminator = discriminator
@@ -85,7 +85,8 @@ class ImageGAN(keras.Model):
         #self.gan.add(generator.generator)
         #self.gan.add(discriminator.discriminator)
         self.batch_size = batch_size
-        self.opt = opt
+        self.optGen = optGen
+        self.optDisc = optDisc
 
         self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 
@@ -103,10 +104,10 @@ class ImageGAN(keras.Model):
             disc_loss = self.discriminator_loss(real_output, fake_output)
 
         gradients_of_dis = disc_tape.gradient(disc_loss,self.discriminator.discriminator.trainable_variables)
-        self.opt.apply_gradients(zip(gradients_of_dis, self.discriminator.discriminator.trainable_variables))
+        self.optDisc.apply_gradients(zip(gradients_of_dis, self.discriminator.discriminator.trainable_variables))
 
         gradients_of_generator = gen_tape.gradient(gen_loss, self.generator.generator.trainable_variables)
-        self.opt.apply_gradients(zip(gradients_of_generator, self.generator.generator.trainable_variables))
+        self.optGen.apply_gradients(zip(gradients_of_generator, self.generator.generator.trainable_variables))
 
         return {
             "des loss": disc_loss,

@@ -96,3 +96,50 @@ def enhanceImage(image,enhancement = 2,method = "NN"):
 
 def getImageGenerator(datadir,subdir,dim,batch):
     return keras.preprocessing.image.ImageDataGenerator(rescale= 1/255.0).flow_from_directory(datadir,classes = [subdir], target_size=dim[:2],color_mode="rgb",batch_size=batch,class_mode=None)
+
+
+def makeMosiacImage(images,n):
+    dim = images[0].shape
+    mosiac = np.zeros((n * dim[0], n * dim[1], dim[2]))
+    if len(images) >= n*n:
+        ind = 0
+        for x in range(n):
+            for y in range(n):
+                mosiac[x * dim[0]:(x + 1) * dim[0], y * dim[1]:(y + 1) * dim[0], :] = images[ind]
+                ind += 1
+    else:
+        print("insufficient images provided")
+    return mosiac
+
+def meanImage(image):
+    channels = image.shape[-1]
+    meanImage = np.zeros(channels)
+    for x in range(channels):
+        meanImage[x] = np.mean(image[:,:,x])
+    return meanImage
+
+def getClosestImageToPixel(images,pixel):
+    meanImages = [meanImage(x) for x in images]
+    order = list(range(len(images)))
+    order.sort(key=lambda x: np.sum(np.square(np.subtract(pixel,meanImages[x]))))
+    return images[order[0]],order[0]
+
+def makeMosiacImageWithBase(images,n,baseImage):
+    dim = images[0].shape
+    mosiac = np.zeros((n * dim[0], n * dim[1], dim[2]))
+    baseImage = baseImage * 255
+    baseImage = Image.fromarray(baseImage.astype(np.uint8))
+    baseImage = baseImage.resize((n,n))
+    baseImage = np.asarray(baseImage) / 255
+
+    if len(images) >= n*n:
+        for x in range(n):
+            for y in range(n):
+                pixel = baseImage[x,y,:]
+                closestImage,ind = getClosestImageToPixel(images,pixel)
+                images = [images[i] for i in range(len(images)) if i != ind]
+                mosiac[x * dim[0]:(x + 1) * dim[0], y * dim[1]:(y + 1) * dim[0], :] = closestImage
+    else:
+        print("insufficient images provided")
+    return mosiac
+
