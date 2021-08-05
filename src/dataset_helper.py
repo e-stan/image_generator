@@ -137,7 +137,7 @@ def makeMosiacImageWithBase(images,n,baseImage):
             for y in range(n):
                 pixel = baseImage[x,y,:]
                 closestImage,ind = getClosestImageToPixel(images,pixel)
-                #images = [images[i] for i in range(len(images)) if i != ind]
+                images = [images[i] for i in range(len(images)) if i != ind]
                 mosiac[x * dim[0]:(x + 1) * dim[0], y * dim[1]:(y + 1) * dim[0], :] = closestImage
     else:
         print("insufficient images provided")
